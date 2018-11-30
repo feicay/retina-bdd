@@ -120,6 +120,7 @@ class Darknet53(nn.Module):
 class RetinaNet(nn.Module):
     def __init__(self, inchannel, num_class, num_anchors):
         super(RetinaNet, self).__init__()
+        self.cls_num = num_class + 1
         cls_channel = (num_class + 1) * num_anchors
         box_channel = 4 * num_anchors
         self.backbone = Darknet53(inchannel)
@@ -135,6 +136,9 @@ class RetinaNet(nn.Module):
         self.cls3 = HeaderBottomBlock(128, cls_channel)
         self.box3 = HeaderBottomBlock(128, box_channel)
     def forward(self, x):
+        #the output has three scales, 1/32, 1/16, 1/8
+        #the cls output size: Batch * [(W*H/32/32 + W*H/16/16 + W*H/8/8)*anchors] * classes
+        #the box output size: Batch * [(W*H/32/32 + W*H/16/16 + W*H/8/8)*anchors] * 4
         x1, x2, x3 = self.backbone(x)
         y1 = self.header1(x3)
         cls1 = self.cls1(y1)
@@ -147,7 +151,17 @@ class RetinaNet(nn.Module):
         y3 = self.header3(y3)
         cls3 = self.cls3(y3)
         box3 = self.box3(y3)
-        return cls1, box1, cls2, box2, cls3, box3
+        B, _, _, _ = cls1.size()
+        cls_pred1 = cls1.permute(0,2,3,1).contiguous().view(B, -1, self.cls_num)
+        box_pred1 = box1.permute(0,2,3,1).contiguous().view(B, -1, self.cls_num)
+        cls_pred2 = cls2.permute(0,2,3,1).contiguous().view(B, -1, self.cls_num)
+        box_pred2 = box2.permute(0,2,3,1).contiguous().view(B, -1, self.cls_num)
+        cls_pred3 = cls3.permute(0,2,3,1).contiguous().view(B, -1, self.cls_num)
+        box_pred3 = box3.permute(0,2,3,1).contiguous().view(B, -1, self.cls_num)
+        cls_pred = torch.cat((cls_pred1, cls_pred2, cls_pred3), 1)
+        box_pred = torch.cat((box_pred1, box_pred2, box_pred3), 1)
+        #return cls1, box1, cls2, box2, cls3, box3
+        return cls_pred, box_pred
 
 def test():
     net = RetinaNet(3, 5, 9)
