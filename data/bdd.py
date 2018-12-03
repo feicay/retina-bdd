@@ -34,8 +34,11 @@ class bddDataset(data.Dataset):
         self.anchor_num = 9
         self.width = width
         self.height = height
+        self.width_now = width
+        self.height_now = height
         self.imageList = []
         self.labelList = []
+        self.size_list = self.make_size_list()
         if train:
             dir_img = imagedir + '/train'
             dir_lab = labeldir + '/train'
@@ -70,6 +73,7 @@ class bddDataset(data.Dataset):
 
     def __getitem__(self, index):
         imgDir = self.imageList[index]
+        self.index = index
         pil_img = Image.open(imgDir)
         mode = pil_img.mode
         #ignore the gray images
@@ -80,9 +84,11 @@ class bddDataset(data.Dataset):
             mode = pil_img.mode
         if self.train:
             #random the input size from (10~16)*32
-            if (self.seen)%1280 == 1 and self.seen > 6400:
-                self.width_now = (random.randint(0,6) + 10)*32
-                self.height_now = (random.randint(0,6) + 10)*32
+            if (self.seen)%160 == 0 and self.seen > 800:
+                i = self.seen // 160
+                i_size = i % 36
+                self.width_now = self.size_list[i_size][0]
+                self.height_now = self.size_list[i_size][1]
                 print('resizing input %d x %d'%(self.width_now,self.height_now))
             img = pil_img.resize( (self.width_now, self.height_now) )
             if self.data_expand:
@@ -107,7 +113,17 @@ class bddDataset(data.Dataset):
             img = pil_img.resize( (self.width, self.height) )
         image = self.transform(img)
         if self.truth:
-            cls_truth, box_truth = self.make_label(self.labelList[index])
+            cls_truth, box_truth = self.make_label(self.labelList[index], self.width_now, self.height_now)
+        self.seen = self.seen + 1
+        return image, cls_truth, box_truth
+
+    def make_size_list(self):
+        a = np.arange(10,16)
+        x, y = np.meshgrid(a,a)
+        x = x.reshape(36, 1)
+        y = y.reshape(36 ,1)
+        size_list = np.concatenate((x,y),axis=1) * 32
+        return size_list
 
     def get_objs(self, label_file):
         with open(label_file,'r') as load_f:
@@ -121,6 +137,8 @@ class bddDataset(data.Dataset):
                     x2 = float(load_dict['frames'][0]['objects'][i]["box2d"]["x2"]) / 1280
                     y1 = float(load_dict['frames'][0]['objects'][i]["box2d"]["y1"]) / 720
                     y2 = float(load_dict['frames'][0]['objects'][i]["box2d"]["y2"]) / 720
+                    if((x2-x1) < 0.00001 or (y2-y1) < 0.00001):
+                        continue
                     cls_ = bdd_names.index(obj_name) + 1
                     obj = torch.Tensor([cls_,x1,y1,x2,y2]).view(1,5)
                     objs.append(obj)
@@ -149,16 +167,6 @@ class bddDataset(data.Dataset):
         box_out[2] = box[2] - box[0]
         box_out[3] = box[3] - box[1]
         return box_out
-
-    def make_anchors(self, scale):
-        w = int(self.width_now * scale + 0.5)
-        h = int(self.height_now * scale + 0.5)
-        i = np.arange(w)
-        j = np.arange(h)
-        x, y = np.meshgrid(i, j)
-        X = torch.from_numpy(x) + 0.5
-        Y = torch.from_numpy(y) + 0.5
-        anchor_grid = torch.zeros()
     
     def make_label(self, obj_truth, width, height):
         #the output has three scales, 1/32, 1/16, 1/8
@@ -213,4 +221,4 @@ def test():
     anchors[:,1] = anchors[:,1]*416
     print(anchors)
 
-test()
+#test()
