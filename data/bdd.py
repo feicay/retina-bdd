@@ -36,7 +36,6 @@ class bddDataset(data.Dataset):
         self.height = height
         self.imageList = []
         self.labelList = []
-        self.size_list = self.make_size_list()
         if train:
             dir_img = imagedir + '/train'
             dir_lab = labeldir + '/train'
@@ -101,6 +100,7 @@ class bddDataset(data.Dataset):
                 img = enh_sha.enhance(sharpness)
         else:
             img = pil_img.resize( (self.width, self.height) )
+            label = label_raw
         image = self.transform(img)
         if self.truth:
             cls_truth, box_truth = self.make_label(label, self.width, self.height)
@@ -108,8 +108,8 @@ class bddDataset(data.Dataset):
         return image, cls_truth, box_truth
     
     def random_flip(self, img, label):
-        if random.random < 0.5:
-            label_out = label.clone()
+        label_out = label.clone()
+        if random.random() < 0.5:
             img = img.transpose(Image.FLIP_LEFT_RIGHT)
             boxes = label_out[:, 1:5]
             xmin = 1 - boxes[:,2]
@@ -119,7 +119,7 @@ class bddDataset(data.Dataset):
             label_out[:, 1:5] = boxes
         return img, label_out
 
-    def random_crop( img, label):
+    def random_crop(self, img, label):
         label_out = label.clone()
         x0 = int(random.random() * 0.3 * 1280)
         y0 = int(random.random() * 0.3 * 720)
@@ -185,7 +185,6 @@ class bddDataset(data.Dataset):
         #the output has three scales, 1/32, 1/16, 1/8
         #the cls label size: Batch * [(W*H/32/32 + W*H/16/16 + W*H/8/8)*anchors] * 1
         #the box label size: Batch * [(W*H/32/32 + W*H/16/16 + W*H/8/8)*anchors] * 4
-        obj_num, _ = obj_truth.size()
         W1 = width // 32
         H1 = height // 32
         W2 = width // 16
@@ -198,31 +197,33 @@ class bddDataset(data.Dataset):
         box_truth1 = torch.zeros(W1*H1, self.anchor_num, 4)
         box_truth2 = torch.zeros(W2*H2, self.anchor_num, 4)
         box_truth3 = torch.zeros(W3*H3, self.anchor_num, 4)
-        for i in range(obj_num):
-            obj_cls = obj_truth[i, 0].clone()
-            obj_box = obj_truth[i, 1:5].clone()
-            _, idx_anchor = self.iou_anchor(obj_box, self.anchors)
-            box_xywh = self.box_xyxy2xywh(obj_box)
-            w1 = int(W1 * box_xywh[0])
-            h1 = int(H1 * box_xywh[1])
-            tx1 = math.log(W1 * box_xywh[0] - w1 + 0.000001)
-            ty1 = math.log(H1 * box_xywh[1] - h1 + 0.000001)
-            tw = math.log(box_xywh[2] / self.anchors[idx_anchor][0])
-            th = math.log(box_xywh[3] / self.anchors[idx_anchor][1])
-            cls_truth1[(h1*W1 + w1), idx_anchor] = obj_cls
-            box_truth1[(h1*W1 + w1), idx_anchor, :] = torch.Tensor([tx1, ty1, tw, th])
-            w2 = int(W2 * box_xywh[0])
-            h2 = int(H2 * box_xywh[1])
-            tx2 = math.log(W2 * box_xywh[0] - w2 + 0.000001)
-            ty2 = math.log(H2 * box_xywh[1] - h2 + 0.000001)
-            cls_truth2[(h2*W2 + w2), idx_anchor] = obj_cls
-            box_truth2[(h2*W2 + w2), idx_anchor, :] = torch.Tensor([tx2, ty2, tw, th])
-            w3 = int(W3 * box_xywh[0])
-            h3 = int(H3 * box_xywh[1])
-            tx3 = math.log(W3 * box_xywh[0] - w3 + 0.000001)
-            ty3 = math.log(H3 * box_xywh[1] - h3 + 0.000001)
-            cls_truth3[(h3*W3 + w3), idx_anchor] = obj_cls
-            box_truth3[(h3*W3 + w3), idx_anchor, :] = torch.Tensor([tx3, ty3, tw, th])
+        if obj_truth.numel() > 0:
+            obj_num, _ = obj_truth.size()
+            for i in range(obj_num):
+                obj_cls = obj_truth[i, 0].clone()
+                obj_box = obj_truth[i, 1:5].clone()
+                _, idx_anchor = self.iou_anchor(obj_box, self.anchors)
+                box_xywh = self.box_xyxy2xywh(obj_box)
+                w1 = int(W1 * box_xywh[0])
+                h1 = int(H1 * box_xywh[1])
+                tx1 = math.log(W1 * box_xywh[0] - w1 + 0.000001)
+                ty1 = math.log(H1 * box_xywh[1] - h1 + 0.000001)
+                tw = math.log(box_xywh[2] / self.anchors[idx_anchor][0])
+                th = math.log(box_xywh[3] / self.anchors[idx_anchor][1])
+                cls_truth1[(h1*W1 + w1), idx_anchor] = obj_cls
+                box_truth1[(h1*W1 + w1), idx_anchor, :] = torch.Tensor([tx1, ty1, tw, th])
+                w2 = int(W2 * box_xywh[0])
+                h2 = int(H2 * box_xywh[1])
+                tx2 = math.log(W2 * box_xywh[0] - w2 + 0.000001)
+                ty2 = math.log(H2 * box_xywh[1] - h2 + 0.000001)
+                cls_truth2[(h2*W2 + w2), idx_anchor] = obj_cls
+                box_truth2[(h2*W2 + w2), idx_anchor, :] = torch.Tensor([tx2, ty2, tw, th])
+                w3 = int(W3 * box_xywh[0])
+                h3 = int(H3 * box_xywh[1])
+                tx3 = math.log(W3 * box_xywh[0] - w3 + 0.000001)
+                ty3 = math.log(H3 * box_xywh[1] - h3 + 0.000001)
+                cls_truth3[(h3*W3 + w3), idx_anchor] = obj_cls
+                box_truth3[(h3*W3 + w3), idx_anchor, :] = torch.Tensor([tx3, ty3, tw, th])
         cls_truth = torch.cat((cls_truth1, cls_truth2, cls_truth3), 0).view(-1).long()
         box_truth = torch.cat((box_truth1, box_truth2, box_truth3), 0).view(-1, 4)
         return cls_truth, box_truth

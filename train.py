@@ -26,8 +26,8 @@ def train():
     lr = 0.001
     step_epoch = 50
     lr_decay = 0.1
-    train_batch_size = 32
-    val_batch_size = 8
+    train_batch_size = 64
+    val_batch_size = 16
     if args.vis:
         vis = visdom.Visdom(env=u'test1')
     #dataset 
@@ -109,7 +109,7 @@ def train():
         }
         if not os.path.isdir('checkpoint'):
             os.mkdir('checkpoint')
-        if (i+5)%d == 0:
+        if (i+1) %  10== 0:
             torch.save(state, './checkpoint/retina-bdd-%03d.pth'%i)
         torch.save(state, './checkpoint/retina-bdd-backup.pth')
         if (i+1) % step_epoch == 0:
