@@ -22,19 +22,20 @@ parser.add_argument('--ngpus', default=4, type=int, help='number of gpus')
 args = parser.parse_args()
 
 def train():
-    max_epoch = 90
+    max_epoch = 110
     lr = 0.001
-    step_epoch = 30
+    step_epoch = 50
     lr_decay = 0.1
-    batch_size = 32
+    train_batch_size = 32
+    val_batch_size = 8
     if args.vis:
         vis = visdom.Visdom(env=u'test1')
     #dataset 
     print('importing dataset...')
     trainset = bdd.bddDataset(416, 416)
-    loader_train = data.DataLoader(trainset, batch_size=32, shuffle=1, num_workers=4, drop_last=True)
+    loader_train = data.DataLoader(trainset, batch_size=train_batch_size, shuffle=1, num_workers=4, drop_last=True)
     valset = bdd.bddDataset(416, 416, train=0)
-    loader_val = data.DataLoader(valset, batch_size=32, shuffle=1, num_workers=4, drop_last=True)
+    loader_val = data.DataLoader(valset, batch_size=val_batch_size, shuffle=1, num_workers=4, drop_last=True)
     #model
     print('initializing network...')
     network = RetinaNet(3, 10, 9)
@@ -108,8 +109,9 @@ def train():
         }
         if not os.path.isdir('checkpoint'):
             os.mkdir('checkpoint')
-        torch.save(state, './checkpoint/retina-bdd-%03d.pth'%i)
-        torch.save(state, './checkpoint/retina-bdd-backup.pth'%i)
+        if (i+5)%d == 0:
+            torch.save(state, './checkpoint/retina-bdd-%03d.pth'%i)
+        torch.save(state, './checkpoint/retina-bdd-backup.pth')
         if (i+1) % step_epoch == 0:
             lr = lr*0.1
             print('learning rate: %f'%lr)

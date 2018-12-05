@@ -2,6 +2,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F 
 from torch.autograd import Variable
+import torch.nn.init as init
 import numpy as np
 
 class Conv2dBlock(nn.Module):
@@ -18,6 +19,7 @@ class Conv2dBlock(nn.Module):
         if activation == 'relu':
             layers.append( nn.ReLU(inplace=True) )
         self.module = nn.Sequential(*layers)
+        init.kaiming_uniform(self.module[0].weight.data, mode='fan_in')
     def forward(self, x):
         out = self.module(x)
         return out
@@ -31,6 +33,7 @@ class UpsampleAddBlock(nn.Module):
             nn.Conv2d(inchannel_left, outchannel, 1, bias=False),
             nn.BatchNorm2d(outchannel)
         )
+        init.kaiming_uniform(self.left[0].weight.data, mode='fan_in')
     def forward(self, x_left, x_up):
         x1 = self.left(x_left)
         x2 = self.up(x_up)
@@ -75,6 +78,8 @@ class ResidualLayer(nn.Module):
             nn.Conv2d(inchannel//2, outchannel, 3, stride=1, padding=1, bias=False),
             nn.BatchNorm2d(outchannel)
         )
+        init.kaiming_uniform(self.left[0].weight.data, mode='fan_in')
+        init.kaiming_uniform(self.left[3].weight.data, mode='fan_in')
     def forward(self, x):
         y = self.left(x) + x
         return F.relu(y)
@@ -92,6 +97,7 @@ class ResidualBlock(nn.Module):
         for i in range(block_num):
             layers.append(ResidualLayer(outchannel, outchannel))
         self.layer2 = nn.Sequential(*layers)
+        init.kaiming_uniform(self.layer1[0].weight.data, mode='fan_in')
     def forward(self, x):
         y = self.layer1(x)
         y = self.layer2(y) 

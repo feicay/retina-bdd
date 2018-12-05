@@ -34,8 +34,6 @@ class bddDataset(data.Dataset):
         self.anchor_num = 9
         self.width = width
         self.height = height
-        self.width_now = width
-        self.height_now = height
         self.imageList = []
         self.labelList = []
         self.size_list = self.make_size_list()
@@ -62,11 +60,6 @@ class bddDataset(data.Dataset):
             self.sharpness = 1.5
         self.transform = T.Compose([T.ToTensor(),T.Normalize(mean=[0.5,0.5,0.5],std=[0.5,0.5,0.5])])
         self.seen = 0
-        #print(self.labelList[9999])
-        #cls_truth, box_truth = self.make_label(self.labelList[9999], 416, 416)
-        #pos = cls_truth > 0
-        #print(cls_truth[pos], box_truth[pos, :] )
-        #print(self.imageList[100], self.labelList[100])
 
     def __len__(self):
         return self.len
@@ -82,15 +75,12 @@ class bddDataset(data.Dataset):
             imgDir = self.imageList[index]
             pil_img = Image.open(imgDir)
             mode = pil_img.mode
+        label_raw = self.labelList[index]
         if self.train:
-            #random the input size from (10~16)*32
-            if (self.seen)%160 == 0 and self.seen > 800:
-                i = self.seen // 160
-                i_size = i % 36
-                self.width_now = self.size_list[i_size][0]
-                self.height_now = self.size_list[i_size][1]
-                print('resizing input %d x %d'%(self.width_now,self.height_now))
-            img = pil_img.resize( (self.width_now, self.height_now) )
+            #random flip and crop the image
+            img, label = self.random_flip(pil_img, label_raw)
+            img, label = self.random_crop(img, label)
+            img = img.resize( (self.width, self.height) )
             if self.data_expand:
                 #Brightness,Color,Contrast,Sharpness range from 0.5~1.5
                 #change exposure
@@ -113,17 +103,40 @@ class bddDataset(data.Dataset):
             img = pil_img.resize( (self.width, self.height) )
         image = self.transform(img)
         if self.truth:
-            cls_truth, box_truth = self.make_label(self.labelList[index], self.width_now, self.height_now)
+            cls_truth, box_truth = self.make_label(label, self.width, self.height)
         self.seen = self.seen + 1
         return image, cls_truth, box_truth
+    
+    def random_flip(self, img, label):
+        if random.random < 0.5:
+            label_out = label.clone()
+            img = img.transpose(Image.FLIP_LEFT_RIGHT)
+            boxes = label_out[:, 1:5]
+            xmin = 1 - boxes[:,2]
+            xmax = 1 - boxes[:,0]
+            boxes[:,0] = xmin
+            boxes[:,2] = xmax
+            label_out[:, 1:5] = boxes
+        return img, label_out
 
-    def make_size_list(self):
-        a = np.arange(10,16)
-        x, y = np.meshgrid(a,a)
-        x = x.reshape(36, 1)
-        y = y.reshape(36 ,1)
-        size_list = np.concatenate((x,y),axis=1) * 32
-        return size_list
+    def random_crop( img, label):
+        label_out = label.clone()
+        x0 = int(random.random() * 0.3 * 1280)
+        y0 = int(random.random() * 0.3 * 720)
+        x1 = int((random.random() * 0.3 + 0.7)*1280)
+        y1 = int((random.random() * 0.3 + 0.7)*720)
+        w = x1 - x0
+        h = y1 - y0
+        img = img.crop((x0, y0, x1, y1))
+        box = label[:, 1:5]
+        box[:, 0] = (box[:, 0] * 1280 - float(x0)).clamp(min=0, max = w).div(w)
+        box[:, 1] = (box[:, 1] * 720 - float(y0)).clamp(min=0, max = h).div(h)
+        box[:, 2] = (box[:, 2] * 1280 - float(x0)).clamp(min=0, max = w).div(w)
+        box[:, 3] = (box[:, 3] * 720 - float(y0)).clamp(min=0, max = h).div(h)
+        area = (box[:, 2] - box[:, 0]) * (box[:, 3] - box[:, 1])
+        mask = area > 0.0001
+        label_out[:, 1:5] = box
+        return img,  label_out[mask, :]
 
     def get_objs(self, label_file):
         with open(label_file,'r') as load_f:
