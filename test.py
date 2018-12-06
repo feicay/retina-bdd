@@ -74,7 +74,7 @@ def plot_boxes_cv2(image, boxes, class_names=None, color=None, fps=None):
     return img
 
 def detect_image(image, network, thresh, names):
-    evaluator = evalRetina(416, 416, obj_thresh=0.4)
+    evaluator = evalRetina(416, 416, obj_thresh=0.1)
     pil_img = Image.open(image)
     w_im, h_im = pil_img.size
     transform = T.Compose([T.ToTensor(),T.Normalize(mean=[0.5,0.5,0.5],std=[0.5,0.5,0.5])])

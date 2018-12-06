@@ -22,11 +22,11 @@ parser.add_argument('--ngpus', default=4, type=int, help='number of gpus')
 args = parser.parse_args()
 
 def train():
-    max_epoch = 110
+    max_epoch = 120
     lr = 0.001
     step_epoch = 50
     lr_decay = 0.1
-    train_batch_size = 64
+    train_batch_size = 32
     val_batch_size = 16
     if args.vis:
         vis = visdom.Visdom(env=u'test1')

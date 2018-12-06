@@ -2,7 +2,7 @@ import os
 import random
 import json
 import math
-from PIL import Image, ImageEnhance
+from PIL import Image, ImageEnhance, ImageDraw
 from PIL import ImageFile
 import torch
 import numpy as np
@@ -128,7 +128,7 @@ class bddDataset(data.Dataset):
         w = x1 - x0
         h = y1 - y0
         img = img.crop((x0, y0, x1, y1))
-        box = label[:, 1:5]
+        box = label_out[:, 1:5]
         box[:, 0] = (box[:, 0] * 1280 - float(x0)).clamp(min=0, max = w).div(w)
         box[:, 1] = (box[:, 1] * 720 - float(y0)).clamp(min=0, max = h).div(h)
         box[:, 2] = (box[:, 2] * 1280 - float(x0)).clamp(min=0, max = w).div(w)
@@ -228,6 +228,22 @@ class bddDataset(data.Dataset):
         box_truth = torch.cat((box_truth1, box_truth2, box_truth3), 0).view(-1, 4)
         return cls_truth, box_truth
 
+def plot_labeled_image(image, label):
+    if label.numel == 0:
+        return
+    draw = ImageDraw.Draw(image)
+    box_num, _ = label.size()
+    boxes = label[:, 1:5]
+    width, height = image.size
+    print(width, height)
+    for i in range(box_num):
+        box = boxes[i, :]
+        x1 = box[0] * width
+        x2 = box[2] * width
+        y1 = box[1] * height
+        y2 = box[3] * height
+        draw.line([(x1,y1),(x1,y2),(x2,y2),(x2,y1),(x1,y1)])
+    image.show()
 
 def test():
     bdd_trainset = bddDataset(416,416,train=0)
