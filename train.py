@@ -29,7 +29,7 @@ def train():
     step_epoch = 50
     lr_decay = 0.1
     train_batch_size = 64
-    val_batch_size = 16
+    val_batch_size = 64
     if args.vis:
         vis = visdom.Visdom(env=u'test1')
     #dataset 
@@ -107,11 +107,18 @@ def train():
             vis.line(Y=torch.cat((loss_val.view(1,1), loss_train.view(1,1)),1).cpu().numpy(),X=np.array([i]),\
                         win='eval-train loss',update='append' if i>0 else None)
         print('Saving weights...')
-        state = {
-            'net': net.module.state_dict(),
-            'loss': loss_val,
-            'epoch': i,
-        }
+        if args.ngpus >1:
+            state = {
+                'net': net.module.state_dict(),
+                'loss': loss_val,
+                'epoch': i,
+            }
+        else:
+            state = {
+                'net': net.state_dict(),
+                'loss': loss_val,
+                'epoch': i,
+            }
         if not os.path.isdir('checkpoint'):
             os.mkdir('checkpoint')
         if (i+1) %  10== 0:
