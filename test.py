@@ -21,7 +21,7 @@ parser = argparse.ArgumentParser(description='PyTorch RetinaNet Testing')
 parser.add_argument('--pth', default='./checkpoint/retina-bdd-backup.pth', type=str, help='load model from checkpoint')
 parser.add_argument('--img', default='./002.jpg', type=str, help='test image')
 parser.add_argument('--vis', default=1, type=int, help='visdom')
-parser.add_argument('--thresh', default=0.5, type=float, help='visdom')
+parser.add_argument('--thresh', default=0.3, type=float, help='visdom')
 args = parser.parse_args()
 
 def plot_boxes_cv2(image, boxes, class_names=None, color=None, fps=None):
@@ -74,7 +74,7 @@ def plot_boxes_cv2(image, boxes, class_names=None, color=None, fps=None):
     return img
 
 def detect_image(image, network, thresh, names):
-    evaluator = evalRetina(416, 416, obj_thresh=0.1)
+    evaluator = evalRetina(416, 416, obj_thresh=args.thresh)
     pil_img = Image.open(image)
     w_im, h_im = pil_img.size
     transform = T.Compose([T.ToTensor(),T.Normalize(mean=[0.5,0.5,0.5],std=[0.5,0.5,0.5])])
@@ -94,6 +94,43 @@ def detect_image(image, network, thresh, names):
     cv2.waitKey(0)
     cv2.destroyAllWindows()
     return 
+
+def detect_vedio(image, network, thresh, names, width=416, height=416):
+    transform = T.Compose([T.ToTensor(),T.Normalize(mean=[0.5,0.5,0.5],std=[0.5,0.5,0.5])])
+    evaluator = evalRetina(416, 416, obj_thresh=args.thresh)
+    if image == '0':
+        cap = cv2.VideoCapture(0)
+    else:
+        cap = cv2.VideoCapture(image)
+    if not cap.isOpened():
+        print("Unable to open camera")
+        exit(-1)
+    fps = 0.0
+    while(cap.isOpened()):  
+        t0 = time.time()
+        ret, img_raw = cap.read()
+        b,g,r=cv2.split(img_raw)
+        img_raw1=cv2.merge([r,g,b])
+        h_im , w_im, _ = img_raw.shape
+        img = cv2.resize(img_raw1,(width, height))
+        if ret == True:
+            img = transform(img).view(1,3,height,width).cuda()
+            cls_pred, box_pred = network(img)
+            result_list = evaluator.forward(cls_pred, box_pred)
+            result = result_list[0]
+            t1 = time.time()
+            fps = 1/(t1-t0)
+            if result is not None:
+                im = plot_boxes_cv2(img_raw, result, names, fps=fps)
+            else:
+                im = img_raw
+            cv2.imshow('prediction',im)
+            print('fps: %f'%fps)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+    cap.release()  
+    cv2.destroyAllWindows()
+    return
 
 def test():
     print('initializing network...')
