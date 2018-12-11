@@ -21,6 +21,7 @@ class FocalLoss(nn.Module):
         pt = p*t + (1-p)*(1-t)         # pt = p if t > 0 else 1-p
         w = alpha*t + (1-alpha)*(1-t)  # w = alpha if t > 0 else 1-alpha
         w = w * (1-pt).pow(gamma)
+        w = w.detach()
         return F.binary_cross_entropy_with_logits(x, t, w, size_average=False)
     
     def forward(self, cls_pred, box_pred, cls_truth, box_truth):

@@ -28,12 +28,14 @@ class UpsampleAddBlock(nn.Module):
     def __init__(self, inchannel_left, outchannel):
         super(UpsampleAddBlock, self).__init__()
         self.name = 'UpsampleAddBlock'
-        self.up = nn.UpsamplingBilinear2d(scale_factor=2)
+        #self.up = nn.UpsamplingBilinear2d(scale_factor=2)
+        self.up = nn.ConvTranspose2d(inchannel_left, outchannel, 2, stride=2)
         self.left = nn.Sequential(
             nn.Conv2d(inchannel_left, outchannel, 1, bias=False),
             nn.BatchNorm2d(outchannel)
         )
         init.orthogonal_(self.left[0].weight.data)
+        init.orthogonal_(self.up.weight.data)
     def forward(self, x_left, x_up):
         x1 = self.left(x_left)
         x2 = self.up(x_up)

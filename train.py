@@ -19,23 +19,26 @@ parser = argparse.ArgumentParser(description='PyTorch RetinaNet Training')
 parser.add_argument('--resume', '-r', action='store_true', help='resume from checkpoint')
 parser.add_argument('--vis', default=1, type=int, help='visdom')
 parser.add_argument('--ngpus', default=4, type=int, help='number of gpus')
+parser.add_argument('--substep', default=1, type=int, help='number of iteration to update the weights, for the poor without strong gpus')
 args = parser.parse_args()
 
+#if you want to visualize the loss, start a terminal and run 'python3 -m visdom.server' 
 def train():
     max_epoch = 120
     lr = 0.001
     step_epoch = 50
     lr_decay = 0.1
-    train_batch_size = 32
+    train_batch_size = 64
     val_batch_size = 16
     if args.vis:
         vis = visdom.Visdom(env=u'test1')
     #dataset 
     print('importing dataset...')
+    substep = args.substep
     trainset = bdd.bddDataset(416, 416)
-    loader_train = data.DataLoader(trainset, batch_size=train_batch_size, shuffle=1, num_workers=4, drop_last=True)
+    loader_train = data.DataLoader(trainset, batch_size=train_batch_size//substep, shuffle=1, num_workers=4, drop_last=True)
     valset = bdd.bddDataset(416, 416, train=0)
-    loader_val = data.DataLoader(valset, batch_size=val_batch_size, shuffle=1, num_workers=4, drop_last=True)
+    loader_val = data.DataLoader(valset, batch_size=val_batch_size//substep, shuffle=1, num_workers=4, drop_last=True)
     #model
     print('initializing network...')
     network = RetinaNet(3, 10, 9)
@@ -62,19 +65,21 @@ def train():
         loss_train = 0.0
         net.train()
         t0 = time.time()
+        optimizer.zero_grad()
         for ii, (image, cls_truth, box_truth) in enumerate(loader_train):
             image = Variable(image).cuda()
             cls_truth = Variable(cls_truth).cuda()
             box_truth = Variable(box_truth).cuda()
             #forward
-            optimizer.zero_grad()
             cls_pred, box_pred = net(image)
             #loss
             loss = criterion(cls_pred, box_pred, cls_truth, box_truth)
             #backward
             loss.backward()
             #update
-            optimizer.step()
+            if (ii+1) % substep == 0:
+                optimizer.step()
+                optimizer.zero_grad()
             loss_train += loss.data
             #print('forward time: %f, loss time: %f, backward time: %f, update time: %f'%((t1-t0),(t2-t1),(t3-t2),(t4-t3)))
             print('%3d/%3d => loss: %f, cls_loss: %f, box_loss: %f'%(ii,i,criterion.loss, criterion.cls_loss, criterion.box_loss))
@@ -113,7 +118,7 @@ def train():
             torch.save(state, './checkpoint/retina-bdd-%03d.pth'%i)
         torch.save(state, './checkpoint/retina-bdd-backup.pth')
         if (i+1) % step_epoch == 0:
-            lr = lr*0.1
+            lr = lr * lr_decay
             print('learning rate: %f'%lr)
             optimizer = optim.Adam(net.parameters(), lr=lr, weight_decay=1e-4)
     torch.save(network,'retina-bdd_final.pkl')

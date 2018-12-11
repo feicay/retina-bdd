@@ -22,6 +22,7 @@ parser.add_argument('--pth', default='./checkpoint/retina-bdd-backup.pth', type=
 parser.add_argument('--img', default='./002.jpg', type=str, help='test image')
 parser.add_argument('--vis', default=1, type=int, help='visdom')
 parser.add_argument('--thresh', default=0.3, type=float, help='visdom')
+parser.add_argument('--onnx', default=0, type=int, help='export onnx graph')
 args = parser.parse_args()
 
 def plot_boxes_cv2(image, boxes, class_names=None, color=None, fps=None):
@@ -138,6 +139,10 @@ def test():
     checkpoint = torch.load(args.pth)
     network.load_state_dict(checkpoint['net'])
     network = network.cuda().eval()
+    if args.onnx:
+        dummy_input = torch.randn(1, 3, 416, 416, device='cuda')
+        torch.onnx.export(network, dummy_input, "retina-bdd.onnx", verbose=True)
+        return
     class_names = ["bus","traffic light","traffic sign","person","bike","truck","motor","car","train","rider"]
 
     image = args.img
