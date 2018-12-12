@@ -29,7 +29,7 @@ def train():
     step_epoch = 50
     lr_decay = 0.1
     train_batch_size = 64
-    val_batch_size = 64
+    val_batch_size = 16
     if args.vis:
         vis = visdom.Visdom(env=u'test1')
     #dataset 

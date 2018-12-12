@@ -25,11 +25,11 @@ class Conv2dBlock(nn.Module):
         return out
 
 class UpsampleAddBlock(nn.Module):
-    def __init__(self, inchannel_left, outchannel):
+    def __init__(self, inchannel_left, inchannel_up, outchannel):
         super(UpsampleAddBlock, self).__init__()
         self.name = 'UpsampleAddBlock'
         #self.up = nn.UpsamplingBilinear2d(scale_factor=2)
-        self.up = nn.ConvTranspose2d(inchannel_left, outchannel, 2, stride=2)
+        self.up = nn.ConvTranspose2d(inchannel_up, outchannel, 2, stride=2)
         self.left = nn.Sequential(
             nn.Conv2d(inchannel_left, outchannel, 1, bias=False),
             nn.BatchNorm2d(outchannel)
@@ -132,33 +132,35 @@ class RetinaNet(nn.Module):
         cls_channel = (num_class + 1) * num_anchors
         box_channel = 4 * num_anchors
         self.backbone = Darknet53(inchannel)
-        self.header1 = HeaderTopBlock(1024, 512)   
-        self.cls1 = HeaderBottomBlock(512, cls_channel)
-        self.box1 = HeaderBottomBlock(512, box_channel)
-        self.up2x = UpsampleAddBlock(512, 512)
-        self.header2 = HeaderTopBlock(512, 256)
+        self.up1x = Conv2dBlock(1024, 256, 3)
+        self.header1 = HeaderTopBlock(256, 256)   
+        self.cls1 = HeaderBottomBlock(256, cls_channel)
+        self.box1 = HeaderBottomBlock(256, box_channel)
+        self.up2x = UpsampleAddBlock(512, 256, 256)
+        self.header2 = HeaderTopBlock(256, 256)
         self.cls2 = HeaderBottomBlock(256, cls_channel)
         self.box2 = HeaderBottomBlock(256, box_channel)
-        self.up4x = UpsampleAddBlock(256, 256)
-        self.header3 = HeaderTopBlock(256, 128)
-        self.cls3 = HeaderBottomBlock(128, cls_channel)
-        self.box3 = HeaderBottomBlock(128, box_channel)
+        self.up4x = UpsampleAddBlock(256, 256, 256)
+        self.header3 = HeaderTopBlock(256, 256)
+        self.cls3 = HeaderBottomBlock(256, cls_channel)
+        self.box3 = HeaderBottomBlock(256, box_channel)
     def forward(self, x):
         #the output has three scales, 1/32, 1/16, 1/8
         #the cls output size: Batch * [(W*H/32/32 + W*H/16/16 + W*H/8/8)*anchors] * classes
         #the box output size: Batch * [(W*H/32/32 + W*H/16/16 + W*H/8/8)*anchors] * 4
         x1, x2, x3 = self.backbone(x)
-        y1 = self.header1(x3)
-        cls1 = self.cls1(y1)
-        box1 = self.box1(y1)
+        y1 = self.up1x(x3)
+        z1 = self.header1(y1)
+        cls1 = self.cls1(z1)
+        box1 = self.box1(z1)
         y2 = self.up2x(x2, y1)
-        y2 = self.header2(y2)
-        cls2 = self.cls2(y2)
-        box2 = self.box2(y2)
+        z2 = self.header2(y2)
+        cls2 = self.cls2(z2)
+        box2 = self.box2(z2)
         y3 = self.up4x(x1, y2)
-        y3 = self.header3(y3)
-        cls3 = self.cls3(y3)
-        box3 = self.box3(y3)
+        z3 = self.header3(y3)
+        cls3 = self.cls3(z3)
+        box3 = self.box3(z3)
         B, _, _, _ = cls1.size()
         cls_pred1 = cls1.permute(0,2,3,1).contiguous().view(B, -1, self.cls_num)
         box_pred1 = box1.permute(0,2,3,1).contiguous().view(B, -1, 4)
